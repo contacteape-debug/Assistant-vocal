@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "assistant-vocal",
+    "name": "Assistant vocal",
     "slug": "assistant-vocal",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -16,15 +16,38 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.anonymous.assistantvocal",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "com.android.alarm.permission.SET_ALARM"
+      ]
     },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    }
+    "plugins": [
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Assistant vocal utilise le micro pour comprendre tes commandes.",
+          "speechRecognitionPermission": "Assistant vocal utilise la reconnaissance vocale pour comprendre tes commandes.",
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox",
+            "com.google.android.as"
+          ]
+        }
+      ],
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "Assistant vocal lit tes contacts pour trouver le numéro de la personne à appeler ou à qui écrire."
+        }
+      ],
+      "expo-notifications",
+      "./plugins/with-launcher-queries",
+      "@react-native-community/datetimepicker"
+    ]
   }
 }
