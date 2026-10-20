@@ -9,9 +9,6 @@
  * l'ordinateur avec `npm run test:parser`.
  */
 
-/** Rendez-vous pro, ou chantier (le « planning »). */
-export type AgendaKind = 'rdv' | 'chantier';
-
 export type Command =
   | { type: 'call'; contact: string }
   | { type: 'sms'; contact: string; body: string }
@@ -24,15 +21,12 @@ export type Command =
   | { type: 'readNotes' }
   | { type: 'clearNotes' }
   | { type: 'reminder'; text: string; at: Date }
-  /** `endDay` : dernier jour d'un chantier sur plusieurs jours. */
-  | { type: 'addEvent'; kind: AgendaKind; title: string; day: Date; endDay?: Date; hour?: number; minute?: number }
-  /**
-   * `day` : un seul jour ; `week` / `nextWeek` : une semaine ; `upcoming` : les prochains.
-   * `kind` absent : rendez-vous et chantiers ensemble.
-   */
-  | { type: 'readAgenda'; scope: 'day' | 'week' | 'nextWeek' | 'upcoming'; from: Date; days: number; kind?: AgendaKind }
-  | { type: 'deleteEvent'; query: string; day?: Date; kind?: AgendaKind }
-  | { type: 'show'; screen: 'notes' | 'agenda'; kind?: AgendaKind }
+  /** `endDay` : dernier jour d'un événement sur plusieurs jours (vacances…). */
+  | { type: 'addEvent'; title: string; day: Date; endDay?: Date; hour?: number; minute?: number }
+  /** `day` : un seul jour ; `week` / `nextWeek` : une semaine ; `upcoming` : les prochains. */
+  | { type: 'readAgenda'; scope: 'day' | 'week' | 'nextWeek' | 'upcoming'; from: Date; days: number }
+  | { type: 'deleteEvent'; query: string; day?: Date }
+  | { type: 'show'; screen: 'notes' | 'agenda' }
   | { type: 'time' }
   | { type: 'date' }
   | { type: 'help' }
@@ -254,7 +248,7 @@ export function parseDay(text: string, now: Date): { day: Date; match: string } 
 }
 
 // ---------------------------------------------------------------------------
-// Plages de jours (chantiers) : "du 20 au 24 octobre", "du lundi au vendredi",
+// Plages de jours (vacances, séjours…) : "du 20 au 24 octobre", "du lundi au vendredi",
 // "à partir de lundi pendant 3 jours"
 // ---------------------------------------------------------------------------
 
@@ -301,45 +295,35 @@ export function parseRange(text: string, now: Date): { start: Date; end: Date; m
 }
 
 // ---------------------------------------------------------------------------
-// Agenda de l'appli (pas celui du téléphone) : rendez-vous pro + chantiers
+// Agenda de l'appli (pas celui du téléphone)
 // ---------------------------------------------------------------------------
 
 const AGENDA_WORD = /\b(?:agenda|calendrier|planning)\b/i;
 // Pas de \b devant : il ne fonctionne pas avant une lettre accentuée (« événement »).
-const EVENT_WORD = /(?:^|[\s'])(?:rendez[\s-]vous|rdv|r[ée]union|[ée]v[ée]nement|chantiers?)/i;
-/** « chantier » ou « planning » (le planning, c'est celui des chantiers). */
-const CHANTIER_WORD = /\b(?:chantiers?|planning)\b/i;
-const RDV_WORD = /(?:^|[\s'])(?:rendez[\s-]vous|rdv|r[ée]unions?)\b/i;
+const EVENT_WORD = /(?:^|[\s'])(?:rendez[\s-]vous|rdv|r[ée]union|[ée]v[ée]nement)/i;
 
-function kindOf(t: string): AgendaKind | undefined {
-  if (CHANTIER_WORD.test(t) || /\b(?:travaille|bosse)\b/i.test(t)) return 'chantier';
-  if (RDV_WORD.test(t) || /\b(?:agenda|calendrier)\b/i.test(t)) return 'rdv';
-  return undefined;
-}
-
-/** « ouvre l'agenda », « qu'est-ce que j'ai demain », « mes chantiers de la semaine » */
+/** « ouvre l'agenda », « qu'est-ce que j'ai demain », « mes rendez-vous de la semaine » */
 const AGENDA_READ_RE =
-  /qu'est[\s-]ce\s+que\s+j'ai|qu'est[\s-]ce\s+qui\s+est\s+pr[ée]vu|qu'ai[\s-]je|j'ai\s+quoi|quoi\s+de\s+pr[ée]vu|mon\s+programme|suis[\s-]je\s+libre|je\s+suis\s+libre|est[\s-]ce\s+que\s+j'ai\s+(?:quelque\s+chose|un\s+rendez|des\s+rendez|rendez|un\s+chantier|des\s+chantiers)|\bmes\s+(?:rendez[\s-]vous|rdv|r[ée]unions|[ée]v[ée]nements|chantiers)\b|\bquels?\s+(?:sont\s+(?:les|mes)\s+)?chantiers?\b|\bo[uù]\s+(?:est[\s-]ce\s+que\s+)?(?:je\s+)?(?:travaille|bosse|suis\s+en\s+chantier)|\bplanning\s+(?:des\s+|de\s+la\s+|du\s+|de\s+)?(?:chantiers|semaine|jour|demain)|^(?:lis|lire|montre|affiche|ouvre|consulte|donne)\s+(?:moi\s+)?(?:mon\s+|l'|le\s+|ton\s+)?(?:agenda|calendrier|planning)\b/i;
+  /qu'est[\s-]ce\s+que\s+j'ai|qu'est[\s-]ce\s+qui\s+est\s+pr[ée]vu|qu'ai[\s-]je|j'ai\s+quoi|quoi\s+de\s+pr[ée]vu|mon\s+programme|suis[\s-]je\s+libre|je\s+suis\s+libre|est[\s-]ce\s+que\s+j'ai\s+(?:quelque\s+chose|un\s+rendez|des\s+rendez|rendez)|\bmes\s+(?:rendez[\s-]vous|rdv|r[ée]unions|[ée]v[ée]nements)\b|\bplanning\s+(?:de\s+la\s+|du\s+|de\s+)?(?:semaine|jour|demain)|^(?:lis|lire|montre|affiche|ouvre|consulte|donne)\s+(?:moi\s+)?(?:mon\s+|l'|le\s+|ton\s+)?(?:agenda|calendrier|planning)\b/i;
 
 const AGENDA_ADD_RE =
-  /^(?:(?:j'ai|nouveau|nouvel|ajoute|ajouter|prends?|fixe|cale|mets|note|programme|planifie|cr[ée]e)\s+(?:un\s+|une\s+|le\s+)?)?(?:rendez[\s-]vous|rdv|r[ée]union|chantier)\b/i;
+  /^(?:(?:j'ai|nouveau|nouvel|ajoute|ajouter|prends?|fixe|cale|mets|note|programme|planifie|cr[ée]e)\s+(?:un\s+|une\s+|le\s+)?)?(?:rendez[\s-]vous|rdv|r[ée]union)\b/i;
 const ADD_VERB_RE = /^(?:ajoute|ajouter|mets|mettre|note|noter|inscris|inscrire|programme|programmer|cr[ée]e|cr[ée]er|planifie|planifier|enregistre|enregistrer)\b/i;
 
 function parseAgendaRead(t: string, now: Date): Command {
   const today = startOfDay(now);
-  const kind = kindOf(t);
   if (/cette\s+semaine/i.test(t)) {
     // Jusqu'à dimanche inclus.
-    return { type: 'readAgenda', scope: 'week', from: today, days: ((7 - today.getDay()) % 7) + 1, kind };
+    return { type: 'readAgenda', scope: 'week', from: today, days: ((7 - today.getDay()) % 7) + 1 };
   }
   if (/semaine\s+prochaine/i.test(t)) {
     const toMonday = ((8 - today.getDay()) % 7) || 7;
-    return { type: 'readAgenda', scope: 'nextWeek', from: addDays(today, toMonday), days: 7, kind };
+    return { type: 'readAgenda', scope: 'nextWeek', from: addDays(today, toMonday), days: 7 };
   }
   const day = parseDay(t, now);
-  if (day) return { type: 'readAgenda', scope: 'day', from: day.day, days: 1, kind };
-  if (/^(?:montre|affiche|ouvre|consulte)\b/i.test(t)) return { type: 'show', screen: 'agenda', kind: kind ?? 'rdv' };
-  return { type: 'readAgenda', scope: 'upcoming', from: today, days: 365, kind };
+  if (day) return { type: 'readAgenda', scope: 'day', from: day.day, days: 1 };
+  if (/^(?:montre|affiche|ouvre|consulte)\b/i.test(t)) return { type: 'show', screen: 'agenda' };
+  return { type: 'readAgenda', scope: 'upcoming', from: today, days: 365 };
 }
 
 /** Retire « à 14 h » et « mardi » d'une phrase ; renvoie ce qui reste. */
@@ -353,20 +337,17 @@ function stripWhen(t: string, now: Date) {
 }
 
 function parseAgendaAdd(t: string, raw: string, now: Date): Command {
-  const kind: AgendaKind = CHANTIER_WORD.test(t) ? 'chantier' : 'rdv';
   let text = t;
   let day: Date | undefined;
   let endDay: Date | undefined;
 
-  if (kind === 'chantier') {
-    const range = parseRange(text, now);
-    if (range) {
-      day = range.start;
-      endDay = range.end;
-      text = text.replace(range.match, ' ');
-    }
+  const range = parseRange(text, now);
+  if (range) {
+    day = range.start;
+    endDay = range.end;
+    text = text.replace(range.match, ' ');
   }
-  // « pendant 3 jours », « pendant 2 semaines » : la durée du chantier.
+  // « pendant 3 jours », « pendant 2 semaines » : la durée de l'événement.
   const during = text.match(/\bpendant\s+(\d+)\s+(jours?|semaines?)\b/i);
   if (during) text = text.replace(during[0], ' ');
   text = text.replace(/(?:^|\s)(?:à|a)\s+partir\s+(?:de\s+|du\s+|d')?/i, ' ');
@@ -381,7 +362,7 @@ function parseAgendaAdd(t: string, raw: string, now: Date): Command {
     .replace(/\s+(?:soir|matin)\b/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-  const lead = /^(?:(?:ajoute|ajouter|mets|mettre|note|noter|inscris|inscrire|programme|programmer|cr[ée]e|cr[ée]er|planifie|planifier|enregistre|enregistrer|fixe|cale|prends?|j'ai|nouveau|nouvelle|nouvel|un|une|le|la|les|des|moi|chantiers?|de|du)\b|l'|d'|:|,)\s*/i;
+  const lead = /^(?:(?:ajoute|ajouter|mets|mettre|note|noter|inscris|inscrire|programme|programmer|cr[ée]e|cr[ée]er|planifie|planifier|enregistre|enregistrer|fixe|cale|prends?|j'ai|nouveau|nouvelle|nouvel|un|une|le|la|les|des|moi|de|du)\b|l'|d'|:|,)\s*/i;
   while (lead.test(title)) title = title.replace(lead, '');
   title = title
     .replace(/(?:\s+(?:à|a|le|la|de|du|pour|et)|\s*[,:.])+$/i, '')
@@ -400,33 +381,28 @@ function parseAgendaAdd(t: string, raw: string, now: Date): Command {
     endDay = addDays(day, Math.max(n, 1) - 1);
   }
 
-  const example = kind === 'chantier'
-    ? '« chantier salle de bain Dupont du 20 au 24 octobre »'
-    : '« dentiste mardi à 14 h » ou « réunion le 25 octobre »';
+  const example = '« dentiste mardi à 14 h » ou « réunion le 25 octobre »';
   if (!day) return { type: 'unknown', text: raw, hint: `Dis quand : ${example}.` };
   if (!title) return { type: 'unknown', text: raw, hint: `Dis aussi ce que c'est : ${example}.` };
   return {
     type: 'addEvent',
-    kind,
     title: capitalize(title),
     day,
-    endDay: kind === 'chantier' && endDay && endDay > day ? endDay : undefined,
+    endDay: endDay && endDay > day ? endDay : undefined,
     hour: clock?.hour,
     minute: clock?.minute,
   };
 }
 
 function parseAgendaDelete(t: string, now: Date): Command {
-  const kind = kindOf(t);
   const { rest, day } = stripWhen(t, now);
   const query = rest
     .replace(/^\s*(?:annule|annuler|supprime|supprimer|efface|effacer|enl[eè]ve|enlever|retire|retirer)\s+/i, '')
     .replace(/(?:^|\s)(?:de|dans|du)\s+(?:mon\s+|l'|le\s+)?(?:agenda|calendrier|planning)\b/gi, ' ')
     .replace(/^(?:(?:les|le|la|mes|mon|ma)\b|l')\s*/i, '')
-    .replace(/^chantiers?\s+(?:(?:de|du|des)\s+|d')?/i, '')
     .replace(/\s+/g, ' ')
     .trim();
-  return { type: 'deleteEvent', query, day: day?.day, kind };
+  return { type: 'deleteEvent', query, day: day?.day };
 }
 
 // ---------------------------------------------------------------------------

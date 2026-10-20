@@ -3,18 +3,17 @@ import { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import type { AgendaKind, NewEvent } from '../lib/agenda';
-import { addDays, capitalize, dayCount, formatClock, formatDate, toDayKey } from '../lib/dates';
+import type { NewEvent } from '../lib/agenda';
+import { addDays, capitalize, formatClock, formatDate } from '../lib/dates';
 import type { Colors } from '../theme';
 
 /**
- * Le formulaire du bouton « + » de l'agenda : ajouter un rendez-vous ou un
- * chantier à la main, sans passer par la voix.
+ * Le formulaire du bouton « Ajouter » de l'agenda : ajouter un rendez-vous à
+ * la main, sans passer par la voix.
  */
 
 type Props = {
   visible: boolean;
-  kind: AgendaKind;
   colors: Colors;
   onCancel: () => void;
   onSave: (event: NewEvent) => void;
@@ -27,42 +26,37 @@ function tomorrow(): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
-export function EventForm({ visible, kind, colors: c, onCancel, onSave }: Props) {
+export function EventForm({ visible, colors: c, onCancel, onSave }: Props) {
   const [title, setTitle] = useState('');
   const [day, setDay] = useState(tomorrow);
-  const [endDay, setEndDay] = useState(tomorrow);
   const [time, setTime] = useState<Time | null>(null);
   const [address, setAddress] = useState('');
   const [notes, setNotes] = useState('');
 
   // Formulaire vide à chaque ouverture. Un rendez-vous a presque toujours une
-  // heure (9 h par défaut, modifiable) ; un chantier, rarement.
+  // heure : 9 h par défaut, modifiable.
   useEffect(() => {
     if (!visible) return;
     setTitle('');
     setDay(tomorrow());
-    setEndDay(tomorrow());
-    setTime(kind === 'rdv' ? { hour: 9, minute: 0 } : null);
+    setTime({ hour: 9, minute: 0 });
     setAddress('');
     setNotes('');
-  }, [visible, kind]);
+  }, [visible]);
 
-  const isChantier = kind === 'chantier';
-
-  function pickDate(current: Date, onPicked: (d: Date) => void, minimumDate?: Date) {
+  function pickDate() {
     DateTimePickerAndroid.open({
-      value: current,
+      value: day,
       mode: 'date',
-      minimumDate,
       onChange: (event, picked) => {
-        if (event.type === 'set' && picked) onPicked(new Date(picked.getFullYear(), picked.getMonth(), picked.getDate()));
+        if (event.type === 'set' && picked) setDay(new Date(picked.getFullYear(), picked.getMonth(), picked.getDate()));
       },
     });
   }
 
   function pickTime() {
     const base = new Date();
-    base.setHours(time?.hour ?? 8, time?.minute ?? 0, 0, 0);
+    base.setHours(time?.hour ?? 9, time?.minute ?? 0, 0, 0);
     DateTimePickerAndroid.open({
       value: base,
       mode: 'time',
@@ -73,19 +67,11 @@ export function EventForm({ visible, kind, colors: c, onCancel, onSave }: Props)
     });
   }
 
-  function onStartPicked(d: Date) {
-    setDay(d);
-    // Un chantier ne peut pas finir avant d'avoir commencé.
-    if (toDayKey(endDay) < toDayKey(d)) setEndDay(d);
-  }
-
   function save() {
     if (!title.trim()) return;
     onSave({
-      kind,
       title: capitalize(title.trim()),
       day,
-      endDay: isChantier ? endDay : undefined,
       hour: time?.hour,
       minute: time?.minute,
       address,
@@ -93,61 +79,43 @@ export function EventForm({ visible, kind, colors: c, onCancel, onSave }: Props)
     });
   }
 
-  const fieldStyle = [styles.field, { backgroundColor: c.surface, color: c.text }];
-  const tint = isChantier ? c.chantier : c.accent;
-  const onTint = isChantier ? c.onChantier : c.onAccent;
-  const days = dayCount(toDayKey(day), toDayKey(endDay));
+  const box = { backgroundColor: c.surface, borderColor: c.border };
+  const fieldStyle = [styles.field, box, { color: c.text }];
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onCancel} statusBarTranslucent navigationBarTranslucent>
       <SafeAreaView style={[styles.screen, { backgroundColor: c.background }]} edges={['top', 'bottom']}>
-        <Text style={[styles.title, { color: c.text }]}>{isChantier ? 'Nouveau chantier' : 'Nouveau rendez-vous'}</Text>
+        <Text style={[styles.title, { color: c.text }]}>Nouveau rendez-vous</Text>
 
         <ScrollView contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled">
-          <Text style={[styles.label, { color: c.text }]}>{isChantier ? 'Chantier' : 'Rendez-vous'}</Text>
+          <Text style={[styles.label, { color: c.muted }]}>Quoi ?</Text>
           <TextInput
             value={title}
             onChangeText={setTitle}
-            placeholder={isChantier ? 'Ex. : Salle de bain Dupont' : 'Ex. : Devis chez M. Martin'}
+            placeholder="Ex. : Dentiste, dîner chez Marc…"
             placeholderTextColor={c.muted}
             style={fieldStyle}
             autoFocus
           />
 
-          <Text style={[styles.label, { color: c.text }]}>{isChantier ? 'Début' : 'Date'}</Text>
-          <Pressable onPress={() => pickDate(day, onStartPicked)} style={[styles.field, styles.pressField, { backgroundColor: c.surface }]}>
-            <Text style={[styles.body, { color: c.text }]}>{capitalize(formatDate(day))}</Text>
-          </Pressable>
-
-          {isChantier && (
-            <>
-              <Text style={[styles.label, { color: c.text }]}>Fin</Text>
-              <Pressable
-                onPress={() => pickDate(endDay, setEndDay, day)}
-                style={[styles.field, styles.pressField, { backgroundColor: c.surface }]}
-              >
-                <Text style={[styles.body, { color: c.text }]}>
-                  {capitalize(formatDate(endDay))} · {days} jour{days > 1 ? 's' : ''}
-                </Text>
-              </Pressable>
-            </>
-          )}
-
-          <Text style={[styles.label, { color: c.text }]}>{isChantier ? "Heure d'arrivée (facultatif)" : 'Heure'}</Text>
+          <Text style={[styles.label, { color: c.muted }]}>Quand ?</Text>
           <View style={styles.row}>
-            <Pressable onPress={pickTime} style={[styles.field, styles.pressField, { backgroundColor: c.surface, flex: 1 }]}>
+            <Pressable onPress={pickDate} style={[styles.field, styles.pressField, box, { flex: 2 }]}>
+              <Text style={[styles.body, { color: c.text }]}>📅 {capitalize(formatDate(day))}</Text>
+            </Pressable>
+            <Pressable onPress={pickTime} style={[styles.field, styles.pressField, box, { flex: 1 }]}>
               <Text style={[styles.body, { color: time ? c.text : c.muted }]}>
-                {time ? formatClock(time.hour, time.minute) : isChantier ? 'Choisir une heure' : 'Toute la journée'}
+                🕐 {time ? formatClock(time.hour, time.minute) : 'Journée'}
               </Text>
             </Pressable>
-            {time && (
-              <Pressable onPress={() => setTime(null)} style={styles.clear} accessibilityLabel="Retirer l'heure">
-                <Text style={[styles.body, { color: c.muted }]}>✕</Text>
-              </Pressable>
-            )}
           </View>
+          {time && (
+            <Pressable onPress={() => setTime(null)} style={styles.link} accessibilityRole="button">
+              <Text style={[styles.small, { color: c.accentText }]}>Toute la journée, sans heure</Text>
+            </Pressable>
+          )}
 
-          <Text style={[styles.label, { color: c.text }]}>Adresse (facultatif)</Text>
+          <Text style={[styles.label, { color: c.muted }]}>Où ? (facultatif)</Text>
           <TextInput
             value={address}
             onChangeText={setAddress}
@@ -156,11 +124,11 @@ export function EventForm({ visible, kind, colors: c, onCancel, onSave }: Props)
             style={fieldStyle}
           />
 
-          <Text style={[styles.label, { color: c.text }]}>Notes (facultatif)</Text>
+          <Text style={[styles.label, { color: c.muted }]}>Notes (facultatif)</Text>
           <TextInput
             value={notes}
             onChangeText={setNotes}
-            placeholder={isChantier ? 'Ex. : code portail 1234, prévoir l’échafaudage' : 'Ex. : apporter le devis'}
+            placeholder="Ex. : apporter la carte Vitale"
             placeholderTextColor={c.muted}
             style={[...fieldStyle, styles.multiline]}
             multiline
@@ -168,15 +136,15 @@ export function EventForm({ visible, kind, colors: c, onCancel, onSave }: Props)
         </ScrollView>
 
         <View style={styles.actions}>
-          <Pressable onPress={onCancel} style={[styles.button, { backgroundColor: c.surface }]}>
+          <Pressable onPress={onCancel} style={[styles.button, { backgroundColor: c.surfaceAlt }]}>
             <Text style={[styles.buttonText, { color: c.text }]}>Annuler</Text>
           </Pressable>
           <Pressable
             onPress={save}
             disabled={!title.trim()}
-            style={[styles.button, { backgroundColor: tint, opacity: title.trim() ? 1 : 0.4 }]}
+            style={[styles.button, { backgroundColor: c.accent, opacity: title.trim() ? 1 : 0.4 }]}
           >
-            <Text style={[styles.buttonText, { color: onTint }]}>Enregistrer</Text>
+            <Text style={[styles.buttonText, { color: c.onAccent }]}>Enregistrer</Text>
           </Pressable>
         </View>
       </SafeAreaView>
@@ -186,16 +154,17 @@ export function EventForm({ visible, kind, colors: c, onCancel, onSave }: Props)
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  title: { fontSize: 24, lineHeight: 32, fontWeight: '700', paddingHorizontal: 16, paddingVertical: 8 },
-  form: { paddingHorizontal: 16, paddingBottom: 16, gap: 8 },
-  label: { fontSize: 14, lineHeight: 20, fontWeight: '600', marginTop: 8 },
+  title: { fontSize: 26, lineHeight: 34, fontWeight: '800', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 4 },
+  form: { paddingHorizontal: 20, paddingBottom: 16, gap: 8 },
+  label: { fontSize: 13, lineHeight: 18, fontWeight: '700', marginTop: 12, textTransform: 'uppercase', letterSpacing: 0.6 },
   body: { fontSize: 16, lineHeight: 24 },
-  field: { minHeight: 48, borderRadius: 12, paddingHorizontal: 16, fontSize: 16 },
+  small: { fontSize: 14, lineHeight: 20 },
+  field: { minHeight: 52, borderRadius: 16, borderWidth: 1, paddingHorizontal: 16, fontSize: 16 },
   pressField: { justifyContent: 'center' },
   multiline: { minHeight: 96, paddingVertical: 12, textAlignVertical: 'top' },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  clear: { minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' },
-  actions: { flexDirection: 'row', gap: 12, paddingHorizontal: 16, paddingVertical: 8 },
-  button: { flex: 1, minHeight: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
-  buttonText: { fontSize: 16, lineHeight: 24, fontWeight: '600' },
+  row: { flexDirection: 'row', gap: 8 },
+  link: { minHeight: 40, justifyContent: 'center' },
+  actions: { flexDirection: 'row', gap: 12, paddingHorizontal: 20, paddingVertical: 12 },
+  button: { flex: 1, minHeight: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center' },
+  buttonText: { fontSize: 16, lineHeight: 24, fontWeight: '700' },
 });

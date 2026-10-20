@@ -5,7 +5,7 @@ import { launchActivity, openApp } from './apps';
 import { findContact, type ContactLookup } from './contacts';
 import { capitalize, formatClock, formatDay, formatLongDate, formatRange, formatTimeKey } from './dates';
 import * as notes from './notes';
-import type { AgendaKind, Command } from './parser';
+import type { Command } from './parser';
 import { scheduleReminder } from './reminders';
 
 /**
@@ -24,29 +24,22 @@ export type ActionResult = {
   events?: agenda.AgendaEvent[];
   /** L'onglet à afficher après la commande. */
   show?: Screen;
-  /** Dans l'agenda : rendez-vous ou chantiers. */
-  agendaKind?: AgendaKind;
 };
 
 export type ActionDeps = {
   confirm: (title: string, message: string) => Promise<boolean>;
 };
 
-export const EXAMPLES = [
-  'Appelle Maman',
-  'Envoie un SMS à Paul pour lui dire que j\'arrive',
-  'Ouvre WhatsApp',
-  'Itinéraire vers la gare',
-  'Cherche recette de crêpes',
-  'Réveille-moi à 7 h 30',
-  'Minuteur 10 minutes',
-  'Note : acheter du pain',
-  'Lis mes notes',
-  'Rendez-vous chez le dentiste mardi à 14 h',
-  'Chantier salle de bain Dupont du 20 au 24 octobre',
-  "Qu'est-ce que j'ai demain ?",
-  'Rappelle-moi d\'appeler le garage dans 1 heure',
-  'Quelle heure est-il ?',
+/** Les phrases proposées sur l'écran d'accueil, avec leur petite icône. */
+export const EXAMPLES: { icon: string; text: string }[] = [
+  { icon: '📞', text: 'Appelle Maman' },
+  { icon: '💬', text: "Envoie un SMS à Paul : j'arrive" },
+  { icon: '⏰', text: 'Réveille-moi à 7 h 30' },
+  { icon: '🧭', text: 'Itinéraire vers la gare' },
+  { icon: '⏱️', text: 'Minuteur 10 minutes' },
+  { icon: '📝', text: 'Note : acheter du pain' },
+  { icon: '📅', text: 'Rendez-vous dentiste mardi à 14 h' },
+  { icon: '🔔', text: "Rappelle-moi d'appeler le garage dans 1 h" },
 ];
 
 export async function runCommand(cmd: Command, deps: ActionDeps): Promise<ActionResult> {
@@ -135,60 +128,48 @@ export async function runCommand(cmd: Command, deps: ActionDeps): Promise<Action
 
     case 'addEvent': {
       const { event, events, alert } = await agenda.addEvent(cmd);
-      return { reply: addedReply(event, alert), events, show: 'agenda', agendaKind: cmd.kind };
+      return { reply: addedReply(event, alert), events, show: 'agenda' };
     }
 
     case 'readAgenda': {
       const all = await agenda.loadEvents();
-      const what = cmd.kind === 'chantier' ? 'chantier' : cmd.kind === 'rdv' ? 'rendez-vous' : 'événement';
       if (cmd.scope === 'upcoming') {
-        const next = agenda.upcomingEvents(all, cmd.from, cmd.kind).slice(0, 5);
-        if (next.length === 0) return { reply: `Aucun ${what} à venir pour l'instant.`, show: 'agenda', agendaKind: cmd.kind };
-        return { reply: `À venir : ${next.map(describeEvent).join(' ; ')}.`, show: 'agenda', agendaKind: cmd.kind };
+        const next = agenda.upcomingEvents(all, cmd.from).slice(0, 5);
+        if (next.length === 0) return { reply: "Rien à venir dans ton agenda pour l'instant.", show: 'agenda' };
+        return { reply: `À venir : ${next.map(describeEvent).join(' ; ')}.`, show: 'agenda' };
       }
-      const found = agenda.eventsBetween(all, cmd.from, cmd.days, cmd.kind);
+      const found = agenda.eventsBetween(all, cmd.from, cmd.days);
       const period =
         cmd.scope === 'week' ? 'cette semaine' : cmd.scope === 'nextWeek' ? 'la semaine prochaine' : formatDay(cmd.from);
-      if (found.length === 0) {
-        const nothing = cmd.kind === 'chantier' ? "tu n'as aucun chantier" : cmd.kind === 'rdv' ? "tu n'as aucun rendez-vous" : "tu n'as rien de prévu";
-        return { reply: `${capitalize(period)}, ${nothing}.`, show: 'agenda', agendaKind: cmd.kind };
-      }
-      // Un jour donné : les chantiers d'abord (où tu travailles), puis les rendez-vous.
-      const items =
-        cmd.scope === 'day'
-          ? [...found.filter((e) => agenda.kindOf(e) === 'chantier'), ...found.filter((e) => agenda.kindOf(e) === 'rdv')].map(describeForDay)
-          : found.map(describeEvent);
+      if (found.length === 0) return { reply: `${capitalize(period)}, tu n'as rien de prévu.`, show: 'agenda' };
+      const items = cmd.scope === 'day' ? found.map(describeForDay) : found.map(describeEvent);
       return {
-        reply: `${capitalize(period)}, tu as ${plural(found.length, what)} : ${items.join(' ; ')}.`,
+        reply: `${capitalize(period)}, tu as ${plural(found.length, 'événement')} : ${items.join(' ; ')}.`,
         show: 'agenda',
-        agendaKind: cmd.kind,
       };
     }
 
     case 'deleteEvent': {
       const all = await agenda.loadEvents();
-      const matches = agenda.findEvents(all, cmd.query, cmd.day, new Date(), cmd.kind);
+      const matches = agenda.findEvents(all, cmd.query, cmd.day, new Date());
       // « annule mon rendez-vous » sans nom ni jour, alors qu'il y en a plusieurs.
       const vague = !cmd.day && agenda.keywords(cmd.query).length === 0 && matches.length > 1;
-      if (matches.length === 0) return { reply: 'Je ne trouve pas ça dans ton agenda.', show: 'agenda', agendaKind: cmd.kind };
-      if (vague) return { reply: 'Lequel ? Précise le nom ou le jour : « annule le chantier Dupont ».', show: 'agenda', agendaKind: cmd.kind };
+      if (matches.length === 0) return { reply: 'Je ne trouve pas ça dans ton agenda.', show: 'agenda' };
+      if (vague) return { reply: 'Lequel ? Précise le nom ou le jour : « annule le dentiste ».', show: 'agenda' };
       const target = matches[0];
       const others = matches.length > 1 ? ` (J'en ai trouvé ${matches.length}, c'est le premier.)` : '';
       const ok = await deps.confirm("Supprimer de l'agenda ?", `${describeEvent(target)}.${others}`);
       if (!ok) return { reply: "D'accord, je le garde." };
       const events = await agenda.deleteEvent(target.id);
-      return { reply: `C'est supprimé : ${target.title}.`, events, show: 'agenda', agendaKind: agenda.kindOf(target) };
+      return { reply: `C'est supprimé : ${target.title}.`, events, show: 'agenda' };
     }
 
     case 'show': {
       if (cmd.screen === 'notes') return { reply: 'Voici tes notes.', show: 'notes' };
-      const kind = cmd.kind ?? 'rdv';
-      const next = agenda.upcomingEvents(await agenda.loadEvents(), new Date(), kind)[0];
-      const name = kind === 'chantier' ? 'le planning des chantiers' : 'tes rendez-vous';
+      const next = agenda.upcomingEvents(await agenda.loadEvents(), new Date())[0];
       return {
-        reply: next ? `Voici ${name}. Prochain : ${describeEvent(next)}.` : `Voici ${name}. Rien de prévu pour l'instant.`,
+        reply: next ? `Voici ton agenda. Prochain : ${describeEvent(next)}.` : "Voici ton agenda. Rien de prévu pour l'instant.",
         show: 'agenda',
-        agendaKind: kind,
       };
     }
 
@@ -203,7 +184,7 @@ export async function runCommand(cmd: Command, deps: ActionDeps): Promise<Action
       };
 
     case 'help':
-      return { reply: `Voici ce que je sais faire. Par exemple : ${EXAMPLES.slice(0, 6).join('. ')}.` };
+      return { reply: `Voici ce que je sais faire. Par exemple : ${EXAMPLES.slice(0, 6).map((e) => e.text).join('. ')}.` };
 
     case 'unknown':
       return { reply: cmd.hint ?? "Je n'ai pas compris. Dis « aide » pour savoir ce que je sais faire." };
@@ -222,33 +203,28 @@ function plural(n: number, word: string) {
 
 /** La phrase dite après un ajout — aussi utilisée par le formulaire « + ». */
 export function addedReply(event: agenda.AgendaEvent, alert: 'scheduled' | 'denied' | 'tooLate'): string {
-  const where = agenda.kindOf(event) === 'chantier' ? 'au planning des chantiers' : 'dans tes rendez-vous';
   const alertText =
     alert === 'scheduled'
       ? event.time
         ? ` Je te préviendrai ${agenda.ALERT_MINUTES_BEFORE} minutes avant.`
-        : ` Je te préviendrai le jour même à ${agenda.ALL_DAY_ALERT_HOUR[agenda.kindOf(event)]} h.`
+        : ` Je te préviendrai le jour même à ${agenda.ALL_DAY_ALERT_HOUR} h.`
       : alert === 'denied'
         ? ' Les notifications sont bloquées : je ne pourrai pas te prévenir.'
         : '';
-  return `C'est ajouté ${where} : ${describeEvent(event)}.${alertText}`;
+  return `C'est ajouté à ton agenda : ${describeEvent(event)}.${alertText}`;
 }
 
 function describeWhen(e: agenda.AgendaEvent): string {
   return `${formatRange(e.date, e.endDate)}${e.time ? ` à ${formatTimeKey(e.time)}` : ''}`;
 }
 
-/** « dentiste, mardi 20 octobre à 14 h » / « chantier Dupont, du lundi… au vendredi… » */
+/** « dentiste, mardi 20 octobre à 14 h » / « vacances, du lundi… au vendredi… » */
 function describeEvent(e: agenda.AgendaEvent): string {
-  const prefix = agenda.kindOf(e) === 'chantier' && !/^chantier/i.test(e.title) ? 'chantier ' : '';
-  return `${prefix}${e.title}, ${describeWhen(e)}`;
+  return `${e.title}, ${describeWhen(e)}`;
 }
 
-/** Quand le jour est déjà dit : « à 14 h, dentiste » / « chantier Dupont ». */
+/** Quand le jour est déjà dit : « à 14 h, dentiste ». */
 function describeForDay(e: agenda.AgendaEvent): string {
-  if (agenda.kindOf(e) === 'chantier') {
-    return `chantier ${e.title}${e.time ? ` à ${formatTimeKey(e.time)}` : ''}${e.address ? `, ${e.address}` : ''}`;
-  }
   return e.time ? `à ${formatTimeKey(e.time)}, ${e.title}` : `${e.title} (toute la journée)`;
 }
 

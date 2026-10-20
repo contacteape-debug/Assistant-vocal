@@ -1,7 +1,7 @@
 # Assistant vocal
 
 Appli Android de commandes vocales en français (Expo / React Native), avec
-notes et agenda (rendez-vous pro + planning des chantiers) propres à l'appli.
+notes et agenda propres à l'appli.
 Voir le [README](README.md) pour ce que l'appli sait faire et où est quoi.
 
 Les règles Expo génériques sont dans [AGENTS.md](AGENTS.md). Ci-dessous, ce

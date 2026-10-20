@@ -1,7 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { formatTimeKey, toDayKey, toTimeKey } from './dates';
-import type { AgendaKind } from './parser';
 import { cancelNotification, scheduleNotification } from './reminders';
 import { normalize } from './text';
 
@@ -9,20 +8,16 @@ import { normalize } from './text';
  * L'agenda de l'appli. Il est indépendant de l'agenda du téléphone (Google
  * Agenda…) : rien n'y est lu ni écrit, tout reste dans l'appli.
  *
- * Deux sortes d'entrées : les rendez-vous pro (un jour, souvent une heure) et
- * les chantiers (le « planning » : souvent plusieurs jours d'affilée).
+ * Une entrée tient sur un jour (souvent avec une heure) ou sur plusieurs
+ * (vacances, séjour…).
  */
-
-export type { AgendaKind };
 
 export type AgendaEvent = {
   id: string;
-  /** Absent sur les entrées créées avant l'arrivée des chantiers : ce sont des rendez-vous. */
-  kind?: AgendaKind;
   title: string;
   /** Premier jour, "2026-10-20" */
   date: string;
-  /** Dernier jour d'un chantier sur plusieurs jours ; absent = un seul jour. */
+  /** Dernier jour d'une entrée sur plusieurs jours ; absent = un seul jour. */
   endDate?: string;
   /** "14:00", absent = toute la journée */
   time?: string;
@@ -33,7 +28,6 @@ export type AgendaEvent = {
 };
 
 export type NewEvent = {
-  kind: AgendaKind;
   title: string;
   day: Date;
   endDay?: Date;
@@ -46,10 +40,9 @@ export type NewEvent = {
 const KEY = 'agenda';
 /** Prévenir combien de minutes avant un rendez-vous à heure fixe. */
 export const ALERT_MINUTES_BEFORE = 30;
-/** Heure de l'alerte quand il n'y a pas d'heure : un chantier commence tôt. */
-export const ALL_DAY_ALERT_HOUR: Record<AgendaKind, number> = { rdv: 8, chantier: 7 };
+/** Heure de l'alerte le jour même, quand l'entrée n'a pas d'heure. */
+export const ALL_DAY_ALERT_HOUR = 8;
 
-export const kindOf = (e: AgendaEvent): AgendaKind => e.kind ?? 'rdv';
 export const lastDay = (e: AgendaEvent) => e.endDate ?? e.date;
 
 const sortKey = (e: AgendaEvent) => `${e.date} ${e.time ?? ''}`;
@@ -70,22 +63,21 @@ async function save(events: AgendaEvent[]) {
 }
 
 /** Les entrées qui touchent la période `from` (inclus) → `from + days` (exclu). */
-export function eventsBetween(events: AgendaEvent[], from: Date, days: number, kind?: AgendaKind): AgendaEvent[] {
+export function eventsBetween(events: AgendaEvent[], from: Date, days: number): AgendaEvent[] {
   const start = toDayKey(from);
   const end = toDayKey(new Date(from.getFullYear(), from.getMonth(), from.getDate() + days));
-  return events.filter((e) => e.date < end && lastDay(e) >= start && (!kind || kindOf(e) === kind));
+  return events.filter((e) => e.date < end && lastDay(e) >= start);
 }
 
-/** Les entrées pas encore terminées (un chantier en cours compte). */
-export function upcomingEvents(events: AgendaEvent[], today: Date, kind?: AgendaKind): AgendaEvent[] {
+/** Les entrées pas encore terminées (une entrée sur plusieurs jours en cours compte). */
+export function upcomingEvents(events: AgendaEvent[], today: Date): AgendaEvent[] {
   const key = toDayKey(today);
-  return events.filter((e) => lastDay(e) >= key && (!kind || kindOf(e) === kind));
+  return events.filter((e) => lastDay(e) >= key);
 }
 
 export async function addEvent(input: NewEvent) {
   const event: AgendaEvent = {
     id: String(Date.now()),
-    kind: input.kind,
     title: input.title.trim(),
     date: toDayKey(input.day),
     endDate: input.endDay && toDayKey(input.endDay) > toDayKey(input.day) ? toDayKey(input.endDay) : undefined,
@@ -96,13 +88,12 @@ export async function addEvent(input: NewEvent) {
 
   const alertAt = new Date(input.day);
   if (event.time) alertAt.setHours(input.hour!, (input.minute ?? 0) - ALERT_MINUTES_BEFORE);
-  else alertAt.setHours(ALL_DAY_ALERT_HOUR[input.kind], 0);
+  else alertAt.setHours(ALL_DAY_ALERT_HOUR, 0);
 
   let alert: 'scheduled' | 'denied' | 'tooLate' = 'tooLate';
   if (alertAt > new Date()) {
-    const label = input.kind === 'chantier' ? 'Chantier' : 'Rendez-vous';
     const body = event.time ? `À ${formatTimeKey(event.time)} : ${event.title}` : `Aujourd'hui : ${event.title}`;
-    const id = await scheduleNotification(label, event.address ? `${body} — ${event.address}` : body, alertAt);
+    const id = await scheduleNotification('Agenda', event.address ? `${body} — ${event.address}` : body, alertAt);
     if (id) event.notificationId = id;
     alert = id ? 'scheduled' : 'denied';
   }
@@ -122,7 +113,7 @@ export async function deleteEvent(id: string): Promise<AgendaEvent[]> {
 }
 
 /** Mots qui ne servent pas à reconnaître une entrée (« le rendez-vous chez… »). */
-const STOPWORDS = new Set(['le', 'la', 'les', 'l', 'de', 'du', 'des', 'd', 'chez', 'avec', 'mon', 'ma', 'mes', 'pour', 'au', 'a', 'un', 'une', 'rendez', 'vous', 'rdv', 'evenement', 'chantier', 'chantiers']);
+const STOPWORDS = new Set(['le', 'la', 'les', 'l', 'de', 'du', 'des', 'd', 'chez', 'avec', 'mon', 'ma', 'mes', 'pour', 'au', 'a', 'un', 'une', 'rendez', 'vous', 'rdv', 'evenement']);
 
 export function keywords(query: string): string[] {
   return normalize(query).split(' ').filter((w) => w && !STOPWORDS.has(w));
@@ -130,12 +121,12 @@ export function keywords(query: string): string[] {
 
 /**
  * Retrouve les entrées pas encore terminées qui correspondent à « dentiste »,
- * « chantier Dupont »… Tous les mots importants dits doivent apparaître dans
+ * « réunion d'équipe »… Tous les mots importants dits doivent apparaître dans
  * le titre ou l'adresse.
  */
-export function findEvents(events: AgendaEvent[], query: string, day: Date | undefined, today: Date, kind?: AgendaKind): AgendaEvent[] {
+export function findEvents(events: AgendaEvent[], query: string, day: Date | undefined, today: Date): AgendaEvent[] {
   const words = keywords(query);
-  return upcomingEvents(events, today, kind).filter((e) => {
+  return upcomingEvents(events, today).filter((e) => {
     if (day && !(e.date <= toDayKey(day) && lastDay(e) >= toDayKey(day))) return false;
     const haystack = ` ${normalize(`${e.title} ${e.address ?? ''}`)} `;
     return words.every((w) => haystack.includes(w));

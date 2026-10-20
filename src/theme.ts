@@ -1,36 +1,45 @@
 import { Alert, useColorScheme } from 'react-native';
 
-/** Couleurs de l'appli, en clair et en sombre (suit le réglage du téléphone). */
+/**
+ * Couleurs de l'appli, en clair et en sombre (suit le réglage du téléphone).
+ * Des tons neutres un peu chauds, et un seul accent vert sauge, doux.
+ */
 export function useColors() {
   const dark = useColorScheme() === 'dark';
   return dark
     ? {
         dark,
-        background: '#121214',
-        surface: '#26262b',
-        text: '#f2f2f5',
-        muted: '#a0a0aa',
-        accent: '#7c8cff',
-        accentText: '#9aa6ff',
-        onAccent: '#0b0b20',
-        danger: '#ff6b6b',
-        // Les chantiers ont leur propre couleur pour ne pas les confondre avec les rendez-vous.
-        chantier: '#ffa04d',
-        onChantier: '#1f1000',
+        background: '#161715',
+        surface: '#21231f',
+        /** Fond des pastilles et de la barre d'onglets, un cran au-dessus. */
+        surfaceAlt: '#2b2e29',
+        /** L'onglet choisi, qui « sort » de la barre. */
+        raised: '#41453e',
+        border: '#353830',
+        text: '#ecebe6',
+        muted: '#a3a199',
+        accent: '#8cc2ab',
+        /** L'accent très dilué : halo du micro, puce de l'heure. */
+        accentSoft: '#2b3a33',
+        accentText: '#9fd0ba',
+        onAccent: '#10201a',
+        danger: '#ff8a7a',
         success: '#5fd38a',
       }
     : {
         dark,
-        background: '#ffffff',
-        surface: '#f0f0f4',
-        text: '#16161a',
-        muted: '#62626e',
-        accent: '#3d4fd6',
-        accentText: '#3d4fd6',
+        background: '#f6f4ef',
+        surface: '#ffffff',
+        surfaceAlt: '#ebe8e1',
+        raised: '#ffffff',
+        border: '#e2ded5',
+        text: '#24221e',
+        muted: '#6b675f',
+        accent: '#4f7a6a',
+        accentSoft: '#dde9e3',
+        accentText: '#3d6a59',
         onAccent: '#ffffff',
-        danger: '#d32f2f',
-        chantier: '#b45309',
-        onChantier: '#ffffff',
+        danger: '#c0392b',
         success: '#1b7f3b',
       };
 }
