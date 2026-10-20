@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/logo.svg" width="120" alt="Logo d'Assistant vocal : un micro sur un rond vert sauge" />
+</p>
+
 # Assistant vocal
 
 Une appli Android pour piloter son téléphone à la voix, en français.
