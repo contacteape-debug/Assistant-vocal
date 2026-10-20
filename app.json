@@ -15,6 +15,10 @@
     "ios": {
       "supportsTablet": true
     },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "name": "Assistant vocal"
+    },
     "android": {
       "package": "com.anonymous.assistantvocal",
       "adaptiveIcon": {

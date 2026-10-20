@@ -1,4 +1,4 @@
-import { Alert, useColorScheme } from 'react-native';
+import { Alert, Platform, useColorScheme } from 'react-native';
 
 /**
  * Couleurs de l'appli, en clair et en sombre (suit le réglage du téléphone).
@@ -48,6 +48,8 @@ export type Colors = ReturnType<typeof useColors>;
 
 /** Une question oui/non. Fermer la boîte sans choisir = non. */
 export function confirm(title: string, message: string, okLabel = 'Effacer'): Promise<boolean> {
+  // Sur le web, Alert.alert n'affiche rien : on passe par la boîte du navigateur.
+  if (Platform.OS === 'web') return Promise.resolve(window.confirm(`${title}\n\n${message}`));
   return new Promise((resolve) => {
     Alert.alert(
       title,

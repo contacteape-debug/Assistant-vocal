@@ -23,6 +23,9 @@ type Status = 'idle' | 'listening' | 'working';
 /** L'utilisateur a-t-il accepté que la voix passe par le service en ligne ? */
 const ONLINE_OK_KEY = 'onlineRecognitionAccepted';
 
+/** La démo dans le navigateur : pas de micro, ni d'appels, ni d'alarmes. */
+const IS_WEB = Platform.OS === 'web';
+
 setupNotifications();
 
 export default function App() {
@@ -114,6 +117,10 @@ function Assistant() {
   });
 
   async function onMicPress() {
+    if (IS_WEB) {
+      push('assistant', "Ici, c'est la démo web : la voix fonctionne dans l'appli Android. Écris ta commande en bas, ou touche un exemple.");
+      return;
+    }
     if (status === 'listening') {
       stopListening();
       return;
@@ -192,6 +199,14 @@ function Assistant() {
         <Text style={[styles.date, { color: c.muted }]}>{capitalize(formatDate(now))}</Text>
         <Text style={[styles.title, { color: c.text }]}>{greeting(now)}</Text>
       </View>
+
+      {IS_WEB && (
+        <View style={[styles.webBanner, { backgroundColor: c.accentSoft }]}>
+          <Text style={[styles.small, { color: c.accentText }]}>
+            Démo web : écris tes commandes. La voix, les appels et les alarmes marchent dans l'appli Android.
+          </Text>
+        </View>
+      )}
 
       <View style={[styles.tabs, { backgroundColor: c.surfaceAlt }]} accessibilityRole="tablist">
         {tabs.map(({ key, icon, label, count }) => {
@@ -375,6 +390,7 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 12 },
   date: { fontSize: 14, lineHeight: 20, fontWeight: '600' },
   title: { fontSize: 30, lineHeight: 38, fontWeight: '800' },
+  webBanner: { marginHorizontal: 16, marginBottom: 10, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 14 },
   tabs: { flexDirection: 'row', marginHorizontal: 16, borderRadius: 22, padding: 4, gap: 4 },
   tab: {
     flex: 1,
